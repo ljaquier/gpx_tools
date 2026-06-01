@@ -63,29 +63,31 @@ def has_missing_segment(trkseg1, trkseg2):
 
     return None
 
-def cost(point1, point2):
-    return get_distance(point1, point2)
-
 def get_missing_segment(reference_route, start_point, end_point):
     start_index, _ = min(enumerate(reference_route), key=lambda item: get_distance(start_point, item[1]))
     end_index, _ = min(enumerate(reference_route), key=lambda item: get_distance(end_point, item[1]))
     points = [start_point] + reference_route[start_index:end_index + 1] + [end_point]
 
-    cumulative_costs = [0.0]
+    cumulative_distances = [0.0]
     for index in range(len(points) - 1):
-        cumulative_costs.append(cumulative_costs[-1] + cost(points[index], points[index + 1]))
+        cumulative_distances.append(cumulative_distances[-1] + get_distance(points[index], points[index + 1]))
+    total_distance = cumulative_distances[-1]
 
-    total_cost = cumulative_costs[-1]
+    start_ele_correction = start_point['ele'] - reference_route[start_index]['ele']
+    end_ele_correction = end_point['ele'] - reference_route[end_index]['ele']
+    delta_ele_correction = end_ele_correction - start_ele_correction
+
     start_time = start_point['time']
-    total_duration = end_point['time'] - start_time
-
-    ele_correction = (start_point['ele'] - reference_route[start_index]['ele'] + end_point['ele'] - reference_route[end_index]['ele']) / 2.0
+    end_time = end_point['time']
+    total_duration = end_time - start_time
 
     trkseg = ET.Element("trkseg")
+    last_point_index = len(points) - 1
     for index, point in enumerate(points):
+        ratio = cumulative_distances[index] / total_distance
         trkpt = ET.SubElement(trkseg, "trkpt", lat=str(point['lat']), lon=str(point['lon']))
-        ET.SubElement(trkpt, "ele").text = str(point['ele'] + (ele_correction if index > 0 and index < len(points) - 1 else 0.0))
-        ET.SubElement(trkpt, "time").text = str(start_time + total_duration * (cumulative_costs[index] / total_cost))
+        ET.SubElement(trkpt, "ele").text = str(point['ele'] + (start_ele_correction + delta_ele_correction * ratio if index > 0 and index < last_point_index else 0.0))
+        ET.SubElement(trkpt, "time").text = str(start_time + total_duration * ratio)
 
     return trkseg
 
