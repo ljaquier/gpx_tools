@@ -107,7 +107,7 @@ def fix_missing_segments(output_file, input_file, reference_file):
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python gpx_missing_segment_fixer.py output.gpx input.gpx reference.gpx")
+        print("Usage: python gpx_missing_segments_fixer.py output.gpx input.gpx reference.gpx")
         sys.exit(1)
 
     output = sys.argv[1]
