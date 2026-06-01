@@ -7,42 +7,48 @@ ET.register_namespace("gpxtpx", "http://www.garmin.com/xmlschemas/TrackPointExte
 ET.register_namespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
 
 NS = {
-    "gpx": "http://www.topografix.com/GPX/1/1"
+    "gpx": "http://www.topografix.com/GPX/1/1",
+    "gpxtpx": "http://www.garmin.com/xmlschemas/TrackPointExtension/v2"
 }
 
-def find_distance_elem(trkpt):
+def clean_trkpt(trkpt):
     ext = trkpt.find("gpx:extensions", NS)
     if ext is None:
-        return None
-    return ext.find("gpx:distance", NS)
+        return
 
-def get_last_distance(trk):
-    last_dist = 0.0
-    for trkseg in trk.findall("gpx:trkseg", NS):
-        for trkpt in trkseg.findall("gpx:trkpt", NS):
-            dist_elem = find_distance_elem(trkpt)
-            if dist_elem is not None and dist_elem.text:
-                try:
-                    last_dist = float(dist_elem.text)
-                except ValueError:
-                    pass
-    return last_dist
+    # Remove <distance>
+    dist_elem = ext.find("gpx:distance", NS)
+    if dist_elem is not None:
+        ext.remove(dist_elem)
 
-def offset_distances(trkseg, offset):
+    # Remove <gpxtpx:course>
+    tpx = ext.find("gpxtpx:TrackPointExtension", NS)
+    if tpx is not None:
+        course_elem = tpx.find("gpxtpx:course", NS)
+        if course_elem is not None:
+            tpx.remove(course_elem)
+
+        # Optional: remove empty TrackPointExtension
+        if len(tpx) == 0:
+            ext.remove(tpx)
+
+    # Optional: remove empty <extensions>
+    if len(ext) == 0:
+        trkpt.remove(ext)
+
+def clean_trkseg(trkseg):
     for trkpt in trkseg.findall("gpx:trkpt", NS):
-        dist_elem = find_distance_elem(trkpt)
-        if dist_elem is not None and dist_elem.text:
-            try:
-                d = float(dist_elem.text)
-                dist_elem.text = str(d + offset)
-            except ValueError:
-                pass
+        clean_trkpt(trkpt)
+
+def clean_track(trk):
+    for trkseg in trk.findall("gpx:trkseg", NS):
+        clean_trkseg(trkseg)
 
 def merge_gpx(output_file, input_files):
     if not input_files:
         raise ValueError("No input files provided")
 
-    # First input is the base
+    # Base file
     base_tree = ET.parse(input_files[0])
     base_root = base_tree.getroot()
     base_trk = base_root.find("gpx:trk", NS)
@@ -50,9 +56,9 @@ def merge_gpx(output_file, input_files):
     if base_trk is None:
         raise ValueError(f"{input_files[0]} has no <trk>")
 
-    current_offset = get_last_distance(base_trk)
+    clean_track(base_trk)
 
-    # Merge remaining files
+    # Merge others
     for file in input_files[1:]:
         tree = ET.parse(file)
         root = tree.getroot()
@@ -63,13 +69,11 @@ def merge_gpx(output_file, input_files):
             continue
 
         for trkseg in trk.findall("gpx:trkseg", NS):
-            offset_distances(trkseg, current_offset)
+            clean_trkseg(trkseg)
             base_trk.append(trkseg)
 
-        current_offset = get_last_distance(base_trk)
-
+    ET.indent(base_tree, space="  ")
     base_tree.write(output_file, encoding="utf-8", xml_declaration=True)
-
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
